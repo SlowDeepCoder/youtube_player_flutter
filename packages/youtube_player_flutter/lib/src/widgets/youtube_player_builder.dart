@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
@@ -32,13 +31,29 @@ class YoutubePlayerBuilder extends StatefulWidget {
 
 class _YoutubePlayerBuilderState extends State<YoutubePlayerBuilder>
     with WidgetsBindingObserver {
-  final GlobalKey playerKey = GlobalKey();
+  final GlobalKey _playerKey = GlobalKey();
+  late bool _isFullScreen;
+  late final _controller;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance?.addObserver(this);
+    _controller = widget.player.controller;
+    _isFullScreen = _controller.value.isFullScreen;
+    _controller.addListener(() {
+      if (_isFullScreen != _controller.value.isFullScreen) {
+        if (mounted) {
+          setState(() {
+            SystemChrome.setEnabledSystemUIMode(
+                SystemUiMode.manual, overlays: _controller.value.isFullScreen ? [] : SystemUiOverlay.values);
+            _isFullScreen = _controller.value.isFullScreen;
+          });
+        }
+      }
+    });
   }
+
 
   @override
   void dispose() {
@@ -47,25 +62,9 @@ class _YoutubePlayerBuilderState extends State<YoutubePlayerBuilder>
   }
 
   @override
-  void didChangeMetrics() {
-    final physicalSize = SchedulerBinding.instance?.window.physicalSize;
-    final controller = widget.player.controller;
-    if (physicalSize != null && physicalSize.width > physicalSize.height) {
-      controller.updateValue(controller.value.copyWith(isFullScreen: true));
-      SystemChrome.setEnabledSystemUIOverlays([]);
-      widget.onEnterFullScreen?.call();
-    } else {
-      controller.updateValue(controller.value.copyWith(isFullScreen: false));
-      SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
-      widget.onExitFullScreen?.call();
-    }
-    super.didChangeMetrics();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final _player = Container(
-      key: playerKey,
+    final player = Container(
+      key: _playerKey,
       child: WillPopScope(
         onWillPop: () async {
           final controller = widget.player.controller;
@@ -78,10 +77,7 @@ class _YoutubePlayerBuilderState extends State<YoutubePlayerBuilder>
         child: widget.player,
       ),
     );
-    final child = widget.builder(context, _player);
-    return OrientationBuilder(
-      builder: (context, orientation) =>
-          orientation == Orientation.portrait ? child : _player,
-    );
+    final child = widget.builder(context, player);
+    return _isFullScreen ? player : child;
   }
 }
